@@ -84,7 +84,7 @@ def check_password():
             st.session_state.password_correct = True
             return True
         else:
-            st.error("Senha incorreta")
+            st.error("")
             return False
 
 # Interface do aplicativo
