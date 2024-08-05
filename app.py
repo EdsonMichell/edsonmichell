@@ -261,6 +261,7 @@ if check_password():
         st.subheader("Gerenciar Vendas a Prazo")
         if st.session_state.sales.empty:
             st.write("Nenhuma venda a prazo efetuada.")
+            st.stop()
         with st.form(key='installment_form'):
             cliente = st.selectbox("Cliente", st.session_state.sales['Cliente'].unique())
             produto = st.selectbox("Produto", st.session_state.sales['Produto'].unique())
