@@ -66,7 +66,7 @@ def verificar_saldo(conta, valor):
 
 
 # Interface do aplicativo
-st.title("Gerenciamento de Loja de Roupas e Acessórios Edson")
+st.title("Gerenciamento de Loja de Roupas e Acessórios")
 
 menu = ["Cadastrar Produto", "Visualizar Inventário", "Registrar Venda", "Relatórios", "Contas com Saldo Atual",
         "Catálogo", "Gerenciador de Vendas a Prazo"]
