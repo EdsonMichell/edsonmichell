@@ -139,24 +139,39 @@ if check_password():
             st.warning("Estoque está vazio. Cadastre mais produtos.")
             st.stop()
         busca_produto = st.text_input("Buscar Produto")
-        produtos_filtrados = st.session_state.products[
-            st.session_state.products['Produto'].str.contains(busca_produto, case=False, na=False)]
-        if produtos_filtrados.empty:
-            st.write("Nenhum produto encontrado.")
-        else:
-            st.dataframe(produtos_filtrados)
-            for i, row in produtos_filtrados.iterrows():
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.write(f"{row['Produto']} - {row['Categoria']}")
-                with col2:
-                    if st.button('Editar', key=f"edit_{i}"):
-                        st.write("Implementar funcionalidade de edição aqui.")
-                with col3:
-                    if st.button('Excluir', key=f"delete_{i}"):
-                        st.session_state.products.drop(index=i, inplace=True)
-                        save_data(st.session_state.products, product_file)
-                        st.success("Produto excluído com sucesso!")
+    produtos_filtrados = st.session_state.products[st.session_state.products['Produto'].str.contains(busca_produto, case=False, na=False)]
+    
+    if produtos_filtrados.empty:
+        st.write("Nenhum produto encontrado.")
+    else:
+        st.dataframe(produtos_filtrados)
+        
+        # Formulário para editar um produto
+        produto_para_editar = st.selectbox("Escolha um produto para editar", produtos_filtrados['Produto'].unique())
+        produto_info = st.session_state.products[st.session_state.products['Produto'] == produto_para_editar].iloc[0]
+
+        with st.form(key='edit_product_form'):
+            produto = st.text_input("Nome do Produto", value=produto_info['Produto'])
+            categoria = st.selectbox("Categoria", ["Roupas", "Acessórios para Celular"], index=["Roupas", "Acessórios para Celular"].index(produto_info['Categoria']))
+            preco_compra = st.number_input("Preço de Compra", min_value=0.0, format="%.2f", value=produto_info['Preço de Compra'])
+            preco_venda = st.number_input("Preço de Venda", min_value=0.0, format="%.2f", value=produto_info['Preço de Venda'])
+            quantidade = st.number_input("Quantidade", min_value=1, step=1, value=produto_info['Quantidade'])
+            conta_pagamento = st.selectbox("Conta Usada para Pagamento", st.session_state.accounts['Conta'].unique(), index=list(st.session_state.accounts['Conta'].unique()).index(produto_info['Conta']))
+            foto = st.file_uploader("Carregar Foto do Produto", type=["png", "jpg", "jpeg"], key='edit_photo')
+            submit_button = st.form_submit_button(label="Salvar Alterações")
+
+            if submit_button:
+                if foto is not None:
+                    foto_path = f"images/{produto}_{foto.name}"
+                    save_image(foto, foto_path)
+                else:
+                    foto_path = produto_info['Foto']
+
+                st.session_state.products.loc[st.session_state.products['Produto'] == produto_para_editar, [
+                    'Produto', 'Categoria', 'Preço de Compra', 'Preço de Venda', 'Quantidade', 'Conta', 'Foto']] = [produto, categoria, preco_compra, preco_venda, quantidade, conta_pagamento, foto_path]
+                
+                save_data(st.session_state.products, product_file)
+                st.success("Produto atualizado com sucesso!")
 
     elif choice == "Registrar Venda":
         st.subheader("Registrar Venda de Produto")
