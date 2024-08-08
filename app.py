@@ -99,10 +99,31 @@ if check_password():
         else:
             st.sidebar.error("Senha incorreta para resetar o programa.")
 
-    menu = ["Cadastrar Produto", "Visualizar Inventário", "Registrar Venda", "Relatórios", "Contas", "Catálogo", "Gerenciador de Vendas a Prazo", "Histórico de Transações"]
-    choice = st.sidebar.selectbox("Menu", menu, index=3)
+    # Menu com botões
+    menu = {
+        "Cadastrar Produto": "cadastrar_produto",
+        "Visualizar Inventário": "visualizar_inventario",
+        "Registrar Venda": "registrar_venda",
+        "Relatórios": "relatorios",
+        "Contas": "contas",
+        "Catálogo": "catalogo",
+        "Gerenciador de Vendas a Prazo": "gerenciador_vendas_prazo",
+        "Histórico de Transações": "historico_transacoes"
+    }
+    
+    # Define a página inicial ou a selecionada
+    if 'page' not in st.session_state:
+        st.session_state.page = "registrar_venda"
+    
+    # Botões do menu
+    for label, page in menu.items():
+        if st.sidebar.button(label):
+            st.session_state.page = page
 
-    if choice == "Cadastrar Produto":
+    # Páginas
+    page = st.session_state.page
+    
+    if page == "cadastrar_produto":
         st.subheader("Cadastrar Novo Produto")
         if st.session_state.accounts.empty:
             st.warning("Nenhuma conta cadastrada. Por favor, cadastre uma conta antes de adicionar produtos.")
@@ -133,31 +154,46 @@ if check_password():
                 else:
                     st.error("Saldo insuficiente na conta escolhida para pagamento!")
 
-    elif choice == "Visualizar Inventário":
+    elif page == "visualizar_inventario":
         st.subheader("Inventário de Produtos")
         if st.session_state.products['Quantidade'].sum() == 0:
             st.warning("Estoque está vazio. Cadastre mais produtos.")
             st.stop()
         busca_produto = st.text_input("Buscar Produto")
-        produtos_filtrados = st.session_state.products[
-            st.session_state.products['Produto'].str.contains(busca_produto, case=False, na=False)]
+        produtos_filtrados = st.session_state.products[st.session_state.products['Produto'].str.contains(busca_produto, case=False, na=False)]
+        
         if produtos_filtrados.empty:
             st.write("Nenhum produto encontrado.")
         else:
             st.dataframe(produtos_filtrados)
-            for i, row in produtos_filtrados.iterrows():
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.write(f"{row['Produto']} - {row['Categoria']}")
-                
-                with col3:
-                    if st.button('Excluir', key=f"delete_{i}"):
-                        st.session_state.products.drop(index=i, inplace=True)
-                        save_data(st.session_state.products, product_file)
-                        st.success("Produto excluído com sucesso!")
+            
+            # Formulário para editar um produto
+            produto_para_editar = st.selectbox("Escolha um produto para editar", produtos_filtrados['Produto'].unique())
+            produto_info = st.session_state.products[st.session_state.products['Produto'] == produto_para_editar].iloc[0]
 
+            with st.form(key='edit_product_form'):
+                produto = st.text_input("Nome do Produto", value=produto_info['Produto'])
+                categoria = st.selectbox("Categoria", ["Roupas", "Acessórios para Celular"], index=["Roupas", "Acessórios para Celular"].index(produto_info['Categoria']))
+                preco_compra = st.number_input("Preço de Compra", min_value=0.0, format="%.2f", value=produto_info['Preço de Compra'])
+                preco_venda = st.number_input("Preço de Venda", min_value=0.0, format="%.2f", value=produto_info['Preço de Venda'])
+                quantidade = st.number_input("Quantidade", min_value=1, step=1, value=produto_info['Quantidade'])
+                conta_pagamento = st.selectbox("Conta Usada para Pagamento", st.session_state.accounts['Conta'].unique(), index=list(st.session_state.accounts['Conta'].unique()).index(produto_info['Conta']))
+                foto = st.file_uploader("Carregar Foto do Produto", type=["png", "jpg", "jpeg"], key="foto_upload")
+                submit_button = st.form_submit_button(label="Salvar Alterações")
 
-    elif choice == "Registrar Venda":
+                if submit_button:
+                    if foto is not None:
+                        foto_path = f"images/{produto}_{foto.name}"
+                        save_image(foto, foto_path)
+                    else:
+                        foto_path = produto_info['Foto']
+                    
+                    st.session_state.products.loc[st.session_state.products['Produto'] == produto_para_editar] = [produto, categoria, preco_compra, preco_venda, quantidade, conta_pagamento, foto_path]
+                    save_data(st.session_state.products, product_file)
+                    st.success("Produto atualizado com sucesso!")
+                    st.experimental_rerun() # Recarrega a página para atualizar a tabela com as alterações
+
+    elif page == "registrar_venda":
         st.subheader("Registrar Venda de Produto")
         if st.session_state.products['Quantidade'].sum() == 0:
             st.warning("Estoque está vazio. Cadastre mais produtos.")
@@ -191,97 +227,63 @@ if check_password():
                     else:
                         st.error("Quantidade insuficiente em estoque!")
 
-    elif choice == "Relatórios":
-        st.subheader("Relatórios Detalhados")
+    elif page == "relatorios":
+        st.subheader("Relatórios")
         total_gasto, total_vendas, total_estoque, lucro = calcular_relatorios()
-        st.write(f"**Total Gasto com Compras:** R${total_gasto:.2f}")
-        st.write(f"**Total em Vendas:** R${total_vendas:.2f}")
-        st.write(f"**Valor em Estoque:** R${total_estoque:.2f}")
-        st.write(f"**Lucro:** R${lucro:.2f}")
-
-        st.subheader("Resumo de Vendas")
-        df_sales_summary = st.session_state.sales.groupby('Produto').agg(
-            Quantidade_Vendida=('Quantidade', 'sum'),
-            Total_Vendido=('Preço de Venda', 'sum')).reset_index()
-        st.dataframe(df_sales_summary)
-
-        st.subheader("Estoque Atual")
-        df_inventory = st.session_state.products[['Produto', 'Quantidade', 'Preço de Venda']]
-        st.dataframe(df_inventory)
-
-        st.subheader("Gráficos")
-        st.write("### Gráfico de Vendas por Produto")
-        chart = alt.Chart(st.session_state.sales).mark_bar().encode(
+        st.write(f"Total gasto em compras: R$ {total_gasto:.2f}")
+        st.write(f"Total de vendas: R$ {total_vendas:.2f}")
+        st.write(f"Valor total em estoque: R$ {total_estoque:.2f}")
+        st.write(f"Lucro: R$ {lucro:.2f}")
+        
+        # Adicionar gráfico de vendas
+        vendas_por_produto = st.session_state.sales.groupby('Produto')['Quantidade'].sum().reset_index()
+        grafico_vendas = alt.Chart(vendas_por_produto).mark_bar().encode(
             x='Produto',
-            y='sum(Quantidade)',
-            color='Produto'
-        ).properties(width=600, height=400)
-        st.altair_chart(chart)
+            y='Quantidade'
+        )
+        st.altair_chart(grafico_vendas, use_container_width=True)
 
-        st.write("### Gráfico de Estoque por Produto")
-        chart = alt.Chart(st.session_state.products).mark_bar().encode(
-            x='Produto',
-            y='Quantidade',
-            color='Produto'
-        ).properties(width=600, height=400)
-        st.altair_chart(chart)
-
-    elif choice == "Contas":
-        st.subheader("Cadastrar Contas")
+    elif page == "contas":
+        st.subheader("Contas com Saldo Atual")
+        st.dataframe(st.session_state.accounts)
         with st.form(key='account_form'):
             conta = st.text_input("Nome da Conta")
             saldo_inicial = st.number_input("Saldo Inicial", min_value=0.0, format="%.2f")
             submit_button = st.form_submit_button(label="Adicionar Conta")
+
             if submit_button:
-                if conta not in st.session_state.accounts['Conta'].values:
+                if conta in st.session_state.accounts['Conta'].values:
+                    st.error("Conta já existente.")
+                else:
                     new_account = pd.DataFrame([[conta, saldo_inicial]], columns=['Conta', 'Saldo'])
                     st.session_state.accounts = pd.concat([st.session_state.accounts, new_account], ignore_index=True)
                     save_data(st.session_state.accounts, accounts_file)
                     st.success("Conta adicionada com sucesso!")
-                else:
-                    st.error("Conta já existente!")
-        st.subheader("Contas Cadastradas")
-        st.dataframe(st.session_state.accounts)
 
-    elif choice == "Catálogo":
+    elif page == "catalogo":
         st.subheader("Catálogo de Produtos")
-        if st.session_state.products.empty:
-            st.write("Nenhum produto cadastrado.")
-        else:
-            for _, row in st.session_state.products.iterrows():
-                if pd.notna(row['Foto']):
-                    st.image(row['Foto'], width=150)
-                st.write(f"**Nome do Produto:** {row['Produto']}")
-                st.write(f"**Preço de Venda:** R${row['Preço de Venda']:.2f}")
-                st.write(f"**Quantidade no Estoque:** {row['Quantidade']}")
-                st.markdown("---")
+        for index, row in st.session_state.products.iterrows():
+            st.image(row['Foto'], caption=row['Produto']) if row['Foto'] else st.write(row['Produto'])
+            st.write(f"Preço: R$ {row['Preço de Venda']:.2f}")
+            st.write(f"Quantidade em estoque: {row['Quantidade']}")
 
-    elif choice == "Gerenciador de Vendas a Prazo":
-        st.subheader("Gerenciar Vendas a Prazo")
+    elif page == "gerenciador_vendas_prazo":
+        st.subheader("Gerenciador de Vendas a Prazo")
+        st.dataframe(st.session_state.installments)
         with st.form(key='installment_form'):
-            cliente = st.selectbox("Cliente", st.session_state.sales['Cliente'].unique())
-            produto = st.selectbox("Produto", st.session_state.sales['Produto'].unique())
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            prazo = st.number_input("Prazo", min_value=1, step=1)
+            cliente = st.text_input("Nome do Cliente")
+            produto = st.selectbox("Produto", st.session_state.products['Produto'])
+            valor = st.number_input("Valor da Venda", min_value=0.0, format="%.2f")
+            prazo = st.date_input("Prazo para Pagamento")
             submit_button = st.form_submit_button(label="Registrar Venda a Prazo")
+
             if submit_button:
-                new_installment = pd.DataFrame([[cliente, produto, valor, prazo, False]], columns=['Cliente', 'Produto', 'Valor', 'Prazo', 'Pago'])
+                new_installment = pd.DataFrame([[cliente, produto, valor, prazo, False]],
+                                               columns=['Cliente', 'Produto', 'Valor', 'Prazo', 'Pago'])
                 st.session_state.installments = pd.concat([st.session_state.installments, new_installment], ignore_index=True)
                 save_data(st.session_state.installments, installments_file)
                 st.success("Venda a prazo registrada com sucesso!")
-        st.subheader("Relatório de Vendas a Prazo")
-        st.dataframe(st.session_state.installments[st.session_state.installments['Pago'] == False])
 
-    elif choice == "Histórico de Transações":
+    elif page == "historico_transacoes":
         st.subheader("Histórico de Transações")
         st.dataframe(st.session_state.sales)
-
-    # Notificações de estoque baixo
-    st.sidebar.subheader("Notificações")
-    estoque_baixo = st.session_state.products[st.session_state.products['Quantidade'] < 5]
-    if not estoque_baixo.empty:
-        st.sidebar.warning("Produtos com estoque baixo:")
-        for i, row in estoque_baixo.iterrows():
-            st.sidebar.write(f"{row['Produto']}: {row['Quantidade']} unidades")
-    else:
-        st.sidebar.write("Nenhum produto com estoque baixo.")
